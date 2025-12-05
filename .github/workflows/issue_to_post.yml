@@ -1,0 +1,72 @@
+name: Issue to Post
+# 当你创建一个带有 'publish' 标签的 Issue 时触发
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  build:
+    # 只有当标签是 'publish' 时才运行
+    if: github.event.label.name == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Convert Issue to Post
+        run: |
+          import os
+          import re
+          import datetime
+
+          # 获取 Issue 信息
+          title = "${{ github.event.issue.title }}"
+          body = """${{ github.event.issue.body }}"""
+          
+          # 1. 生成文件名 (YYYY-MM-DD-title.md)
+          date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+          # 把标题里的空格和特殊符号换成连字符
+          slug = re.sub(r'[^a-zA-Z0-9]', '-', title).lower()
+          slug = re.sub(r'-+', '-', slug).strip('-')
+          filename = f"_posts/{date_str}-{slug}.md"
+
+          # 2. 生成文章内容 (自动加上头部信息)
+          # 假设第一段话如果是 'Hey there' 开头，就斜体处理，否则正常
+          # 这里我们做个简单的处理，直接把 Issue 内容放进去
+          
+          post_content = f"""---
+          layout: post
+          title: "{title}"
+          date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S +0800")}
+          background: '/img/home-bg.jpg'
+          ---
+
+          {body}
+          """
+
+          # 3. 写入文件
+          # 确保 _posts 目录存在
+          if not os.path.exists("_posts"):
+              os.makedirs("_posts")
+              
+          with open(filename, "w", encoding="utf-8") as f:
+              f.write(post_content)
+          
+          print(f"Created post: {filename}")
+
+        shell: python
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add _posts/*.md
+          git commit -m "New post from Issue #${{ github.event.issue.number }}"
+          git push
